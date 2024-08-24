@@ -5,42 +5,6 @@ import transformers
 from safetensors.torch import load_file
 from collections import defaultdict
 
-def load_tokenizer_only(model_size, hf_token=None):
-    tokenizer = AutoTokenizer.from_pretrained(f'/dlabdata1/llama2_hf/Llama-2-{model_size}-hf', use_auth_token=hf_token)
-    return tokenizer
-
-def load_unemb_only(model_size):
-    if model_size == '70B' or model_size == '70b':
-        lm_head_state_dict = load_file("/dlabdata1/llama2_hf/Llama-2-70b-hf/model-00015-of-00015.safetensors")
-        norm_state_dict = load_file("/dlabdata1/llama2_hf/Llama-2-70b-hf/model-00014-of-00015.safetensors")
-    if model_size == '7B' or model_size == '7b':
-        lm_head_state_dict = load_file('/dlabdata1/llama2_hf/Llama-2-7b-hf/model-00002-of-00002.safetensors')
-        norm_state_dict = lm_head_state_dict 
-    if model_size == '13B' or model_size == '13b':
-        lm_head_state_dict = load_file("/dlabdata1/llama2_hf/Llama-2-13b-hf/model-00003-of-00003.safetensors")
-        norm_state_dict = lm_head_state_dict
-        
-    norm_params = norm_state_dict['model.norm.weight'].detach().clone()
-    lm_head_params = lm_head_state_dict['lm_head.weight'].detach().clone()
-    
-    
-    lm_head = nn.Linear(*lm_head_params.shape[::-1], bias=False)
-    lm_head.weight.requires_grad_(False)
-    lm_head.weight.copy_(lm_head_params)
-    norm = transformers.models.llama.modeling_llama.LlamaRMSNorm(len(norm_params))
-    norm.weight.requires_grad_(False)
-    norm.weight.copy_(norm_params)
-    unemb = nn.Sequential(norm, lm_head)
-    if torch.cuda.device_count() >= 2:
-        print(f"Using {torch.cuda.device_count()} GPUs!")
-        # Wrap your model with DataParallel
-        unemb = nn.DataParallel(unemb, device_ids=[0, 1])
-        # Move your model to the first device
-        unemb = unemb.cuda()
-    else:
-        unemb.cuda()
-    return unemb
-
 class AttnWrapper(torch.nn.Module):
     def __init__(self, attn):
         super().__init__()
@@ -278,6 +242,8 @@ class LlamaHelper:
         elif return_mlp_post_activation:
             for i, layer in enumerate(self.model.model.layers):
                 tensors += [layer.mlp_post_activation.detach().cpu()]
+        print(f"Original tensors size: {len(tensors)}")
+        print(f"Original tensors size: {tensors[0].shape}")
         return torch.cat(tensors, dim=0)
         
     def decode_all_layers(self, text, topk=10, print_attn_mech=True, print_intermediate_res=True, print_mlp=True, print_block=True):

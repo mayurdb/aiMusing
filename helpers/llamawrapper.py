@@ -242,6 +242,8 @@ class LlamaHelper:
         elif return_mlp_post_activation:
             for i, layer in enumerate(self.model.model.layers):
                 tensors += [layer.mlp_post_activation.detach().cpu()]
+        print(f"Original tensors size: {len(tensors)}")
+        print(f"Original tensors size: {tensors[0].shape}")
         return torch.cat(tensors, dim=0)
         
     def decode_all_layers(self, text, topk=10, print_attn_mech=True, print_intermediate_res=True, print_mlp=True, print_block=True):
